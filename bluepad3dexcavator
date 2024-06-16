@@ -1,0 +1,288 @@
+#include "Adafruit_MCP23X17.h"
+#include <Bluepad32.h>
+#include <ESP32Servo.h>  // by Kevin Harrington
+
+// defines
+#define clawServoPin 5
+#define auxServoPin 18
+#define cabLights 32
+#define auxLights 33
+
+#define pivot0 15
+#define pivot1 14
+#define mainBoom0 9
+#define mainBoom1 8
+#define secondBoom0 0
+#define secondBoom1 1
+#define tiltAttach0 3
+#define tiltAttach1 2
+#define thumb0 11
+#define thumb1 10
+#define auxAttach0 12
+#define auxAttach1 13
+
+#define leftMotor0 7
+#define leftMotor1 6
+#define rightMotor0 4
+#define rightMotor1 5
+
+Adafruit_MCP23X17 mcp;
+Servo clawServo;
+Servo auxServo;
+int dly = 250;
+int clawServoValue = 90;
+int auxServoValue = 90;
+int servoDelay = 0;
+
+bool cabLightsOn = false;
+bool auxLightsOn = false;
+bool moveClawServoUp = false;
+bool moveClawServoDown = false;
+bool moveAuxServoUp = false;
+bool moveAuxServoDown = false;
+
+GamepadPtr myGamepad;
+
+void onConnectedGamepad(GamepadPtr gp) {
+  myGamepad = gp;
+  Serial.println("Gamepad connected.");
+}
+
+void onDisconnectedGamepad(GamepadPtr gp) {
+  myGamepad = nullptr;
+  Serial.println("Gamepad disconnected.");
+}
+
+void setup() {
+  Serial.begin(115200);
+  BP32.setup(&onConnectedGamepad, &onDisconnectedGamepad);
+
+  mcp.begin_I2C();
+  for (int i = 0; i <= 15; i++) {
+    mcp.pinMode(i, OUTPUT);
+  }
+
+  pinMode(clawServoPin, OUTPUT);
+  pinMode(auxServoPin, OUTPUT);
+
+  pinMode(cabLights, OUTPUT);
+  pinMode(auxLights, OUTPUT);
+
+  clawServo.attach(clawServoPin);
+  auxServo.attach(auxServoPin);
+  clawServo.write(clawServoValue);
+  auxServo.write(auxServoValue);
+
+  Serial.println("Ready.");
+}
+
+void loop() {
+  BP32.update();
+  if (myGamepad) {
+    // Digital D-pad button events
+    if (myGamepad->dpad() & DPAD_UP) {
+      mcp.digitalWrite(thumb0, HIGH);
+      mcp.digitalWrite(thumb1, LOW);
+      Serial.println("Pressed up button");
+    } else if (myGamepad->dpad() & DPAD_DOWN) {
+      mcp.digitalWrite(thumb0, LOW);
+      mcp.digitalWrite(thumb1, HIGH);
+      Serial.println("Pressed down button");
+    } else {
+      mcp.digitalWrite(thumb0, LOW);
+      mcp.digitalWrite(thumb1, LOW);
+    }
+
+    if (myGamepad->dpad() & DPAD_RIGHT) {
+      mcp.digitalWrite(auxAttach0, HIGH);
+      mcp.digitalWrite(auxAttach1, LOW);
+      Serial.println("Pressed right button");
+    } else if (myGamepad->dpad() & DPAD_LEFT) {
+      mcp.digitalWrite(auxAttach0, LOW);
+      mcp.digitalWrite(auxAttach1, HIGH);
+      Serial.println("Pressed left button");
+    } else {
+      mcp.digitalWrite(auxAttach0, LOW);
+      mcp.digitalWrite(auxAttach1, LOW);
+    }
+
+    // Analog stick events
+    int LXValue = myGamepad->axisX();
+    int LYValue = myGamepad->axisY();
+    int RXValue = myGamepad->axisRX();
+    int RYValue = myGamepad->axisRY();
+
+    if (LXValue > 115) {
+      mcp.digitalWrite(pivot0, HIGH);
+      mcp.digitalWrite(pivot1, LOW);
+      Serial.println("Left stick moved right");
+    } else if (LXValue < -115) {
+      mcp.digitalWrite(pivot0, LOW);
+      mcp.digitalWrite(pivot1, HIGH);
+      Serial.println("Left stick moved left");
+    } else {
+      mcp.digitalWrite(pivot0, LOW);
+      mcp.digitalWrite(pivot1, LOW);
+    }
+
+    if (LYValue > 115) {
+      mcp.digitalWrite(secondBoom0, HIGH);
+      mcp.digitalWrite(secondBoom1, LOW);
+      Serial.println("Left stick moved up");
+    } else if (LYValue < -115) {
+      mcp.digitalWrite(secondBoom0, LOW);
+      mcp.digitalWrite(secondBoom1, HIGH);
+      Serial.println("Left stick moved down");
+    } else {
+      mcp.digitalWrite(secondBoom0, LOW);
+      mcp.digitalWrite(secondBoom1, LOW);
+    }
+
+    if (RXValue > 115) {
+      mcp.digitalWrite(tiltAttach0, HIGH);
+      mcp.digitalWrite(tiltAttach1, LOW);
+      Serial.println("Right stick moved right");
+    } else if (RXValue < -115) {
+      mcp.digitalWrite(tiltAttach0, LOW);
+      mcp.digitalWrite(tiltAttach1, HIGH);
+      Serial.println("Right stick moved left");
+    } else {
+      mcp.digitalWrite(tiltAttach0, LOW);
+      mcp.digitalWrite(tiltAttach1, LOW);
+    }
+
+    if (RYValue > 115) {
+      mcp.digitalWrite(mainBoom0, HIGH);
+      mcp.digitalWrite(mainBoom1, LOW);
+      Serial.println("Right stick moved up");
+    } else if (RYValue < -115) {
+      mcp.digitalWrite(mainBoom0, LOW);
+      mcp.digitalWrite(mainBoom1, HIGH);
+      Serial.println("Right stick moved down");
+    } else {
+      mcp.digitalWrite(mainBoom0, LOW);
+      mcp.digitalWrite(mainBoom1, LOW);
+    }
+
+    // Shoulder and trigger buttons
+    if (myGamepad->buttons() & BUTTON_SHOULDER_L) {
+      mcp.digitalWrite(leftMotor0, HIGH);
+      mcp.digitalWrite(leftMotor1, LOW);
+      Serial.println("Pressed left shoulder button");
+    } else {
+      mcp.digitalWrite(leftMotor0, LOW);
+      mcp.digitalWrite(leftMotor1, LOW);
+    }
+
+    if (myGamepad->buttons() & BUTTON_SHOULDER_R) {
+      mcp.digitalWrite(rightMotor0, HIGH);
+      mcp.digitalWrite(rightMotor1, LOW);
+      Serial.println("Pressed right shoulder button");
+    } else {
+      mcp.digitalWrite(rightMotor0, LOW);
+      mcp.digitalWrite(rightMotor1, LOW);
+    }
+
+    if (myGamepad->buttons() & BUTTON_TRIGGER_L) {
+      mcp.digitalWrite(leftMotor0, LOW);
+      mcp.digitalWrite(leftMotor1, HIGH);
+      Serial.println("Pressed left trigger button");
+    } else {
+      mcp.digitalWrite(leftMotor0, LOW);
+      mcp.digitalWrite(leftMotor1, LOW);
+    }
+
+    if (myGamepad->buttons() & BUTTON_TRIGGER_R) {
+      mcp.digitalWrite(rightMotor0, LOW);
+      mcp.digitalWrite(rightMotor1, HIGH);
+      Serial.println("Pressed right trigger button");
+    } else {
+      mcp.digitalWrite(rightMotor0, LOW);
+      mcp.digitalWrite(rightMotor1, LOW);
+    }
+
+    // Cross/square/triangle/circle buttons
+    if (myGamepad->buttons() & BUTTON_A) {
+      moveClawServoUp = true;
+      Serial.println("Pressed A button");
+    } else {
+      moveClawServoUp = false;
+    }
+
+    if (myGamepad->buttons() & BUTTON_X) {
+      moveAuxServoUp = true;
+      Serial.println("Pressed X button");
+    } else {
+      moveAuxServoUp = false;
+    }
+
+    if (myGamepad->buttons() & BUTTON_Y) {
+      moveClawServoDown = true;
+      Serial.println("Pressed Y button");
+    } else {
+      moveClawServoDown = false;
+    }
+
+    if (myGamepad->buttons() & BUTTON_B) {
+      moveAuxServoDown = true;
+      Serial.println("Pressed B button");
+    } else {
+      moveAuxServoDown = false;
+    }
+
+    // Stick buttons
+    if (myGamepad->buttons() & BUTTON_THUMB_L) {
+      cabLightsOn = !cabLightsOn;
+      digitalWrite(cabLights, cabLightsOn ? HIGH : LOW);
+      Serial.println("Pressed left stick button");
+    }
+
+    if (myGamepad->buttons() & BUTTON_THUMB_R) {
+      auxLightsOn = !auxLightsOn;
+      digitalWrite(auxLights, auxLightsOn ? HIGH : LOW);
+      Serial.println("Pressed right stick button");
+    }
+
+    // Servo control
+    if (moveClawServoUp) {
+      if (servoDelay == 3) {
+        if (clawServoValue >= 10 && clawServoValue < 170) {
+          clawServoValue++;
+          clawServo.write(clawServoValue);
+        }
+        servoDelay = 0;
+      }
+      servoDelay++;
+    }
+    if (moveClawServoDown) {
+      if (servoDelay == 3) {
+        if (clawServoValue <= 170 && clawServoValue > 10) {
+          clawServoValue--;
+          clawServo.write(clawServoValue);
+        }
+        servoDelay = 0;
+      }
+      servoDelay++;
+    }
+    if (moveAuxServoUp) {
+      if (servoDelay == 3) {
+        if (auxServoValue >= 10 && auxServoValue < 170) {
+          auxServoValue++;
+          auxServo.write(auxServoValue);
+        }
+        servoDelay = 0;
+      }
+      servoDelay++;
+    }
+    if (moveAuxServoDown) {
+      if (servoDelay == 3) {
+        if (auxServoValue <= 170 && auxServoValue > 10) {
+          auxServoValue--;
+          auxServo.write(auxServoValue);
+        }
+        servoDelay = 0;
+      }
+      servoDelay++;
+    }
+  }
+}
